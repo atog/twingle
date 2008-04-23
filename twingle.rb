@@ -39,18 +39,19 @@ Shoes.app :width => 400, :height => 600, :resizable => true, :title => "Twingle,
   end
   
   def linkinizer(message)
+<<<<<<< HEAD:twingle.rb
     index = message.index(":")
     result = "span(strong(\"#{message[0, index]}\"), :font => '15px'), "
     message = message[index+1, message.length-index]
 
-    if /http:\/\/\S+|@\S+/i =~ message
+    if /http:\/\/\S+|@\w+/i =~ message
       pindex = 0
-      message.scan(/http:\/\/\S+|@\S+/i) do |l|
+      message.scan(/http:\/\/\S+|@\w+/i) do |l|
         index = message.rindex(l)
         result << "\"#{message[pindex, index-pindex]}\"," if index > 0
         result << " link(\"#{l}\", :click => "
         if /@(\S+)/ =~ l
-          result << "\'http://twitter.com/#{l[/@(\S+)/,1]}\'),"
+          result << "\"http://twitter.com/#{l[/@(\w+)/,1]}\"),"
         else
           result << "'#{l}'),"
         end
