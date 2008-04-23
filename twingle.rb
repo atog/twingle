@@ -1,4 +1,5 @@
-# atog@jabber.belnet.be
+YOUR_JID = ""
+YOUR_PASSWORD = ""
 
 Shoes.setup do
   gem "xmpp4r-simple"
