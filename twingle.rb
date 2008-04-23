@@ -9,15 +9,15 @@ require "xmpp4r-simple"
 Shoes.app :width => 300, :height => 600, :resizable => true, :title => "Twingle, experience twitter" do
   
   def linkinizer(message)
-    if /http:\/\/\S+|@\S+/i =~ message
+    if /http:\/\/\S+|@\w+/i =~ message
       result = ""
       pindex = 0
-      message.scan(/http:\/\/\S+|@\S+/i) do |l|
+      message.scan(/http:\/\/\S+|@\w+/i) do |l|
         index = message.rindex(l)
         result << "\"#{message[pindex, index-pindex]}\"," if index > 0
         result << " link(\"#{l}\", :click => "
         if /@(\S+)/ =~ l
-          result << "\"http://twitter.com/#{l[/@(\S+)/,1]}\"),"
+          result << "\"http://twitter.com/#{l[/@(\w+)/,1]}\"),"
         else
           result << "\"#{l}\"),"
         end
@@ -32,7 +32,7 @@ Shoes.app :width => 300, :height => 600, :resizable => true, :title => "Twingle,
   
   background "#eed"
   
-  @jabber = Jabber::Simple.new("atog@jabber.belnet.be", "00xmpp42")  
+  @jabber = Jabber::Simple.new(YOUR_JID, YOUR_PASSWORD)  
     
   @main = stack do
     background "#fff"
