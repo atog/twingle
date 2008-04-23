@@ -1,5 +1,5 @@
-YOUR_JID = "inferis@jabber.belnet.be"
-YOUR_PASSWORD = "00xmpp42"
+YOUR_JID = ""
+YOUR_PASSWORD = ""
 
 Shoes.setup do
   gem "xmpp4r-simple"
@@ -120,5 +120,5 @@ Shoes.app :width => 400, :height => 600, :resizable => true, :title => "Twingle,
     end    
   end
   
-  @chat_sound = video 'chat2.flv', :width => 0, :height => 0
+  @chat_sound = video 'chat2.wav', :width => 0, :height => 0
 end
