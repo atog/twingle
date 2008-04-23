@@ -40,7 +40,7 @@ Shoes.app :width => 400, :height => 600, :resizable => true, :title => "Twingle,
   
   def linkinizer(message)
     index = message.index(":")
-    result = "strong(\"#{message[0, index]}\", :font => '16px'), "
+    result = "span(strong(\"#{message[0, index]}\"), :font => '15px'), "
     message = message[index+1, message.length-index]
 
     if /http:\/\/\S+|@\S+/i =~ message
