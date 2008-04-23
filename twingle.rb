@@ -1,5 +1,5 @@
-YOUR_JID = ""
-YOUR_PASSWORD = ""
+YOUR_JID = "inferis@jabber.belnet.be"
+YOUR_PASSWORD = "00xmpp42"
 
 Shoes.setup do
   gem "xmpp4r-simple"
@@ -40,7 +40,7 @@ Shoes.app :width => 400, :height => 600, :resizable => true, :title => "Twingle,
   
   def linkinizer(message)
     index = message.index(":")
-    result = "strong(\"#{message[0, index]}\"), "
+    result = "strong(\"#{message[0, index]}\", :font => '16px'), "
     message = message[index+1, message.length-index]
 
     if /http:\/\/\S+|@\S+/i =~ message
@@ -62,8 +62,7 @@ Shoes.app :width => 400, :height => 600, :resizable => true, :title => "Twingle,
     end    
 
     result = result
-    result.gsub!(/"[^"]+"/) { |m| html(m) }
-    html(result)
+    result.gsub(/"[^"]+"/) { |m| html(m) }
   end
 
   def send_say_it 
