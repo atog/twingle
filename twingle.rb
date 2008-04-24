@@ -1,15 +1,21 @@
-YOUR_JID = ""
-YOUR_PASSWORD = ""
-
 Shoes.setup do
   gem "xmpp4r-simple"
 end
 
 require "xmpp4r-simple"
+require "yaml"
 
 Shoes.app :width => 400, :height => 600, :resizable => true, :title => "Twingle, experience twitter" do
+  
+  @settings = YAML.load_file('twingle.yaml')
+  @jabber = Jabber::Simple.new(@settings["jabber"]["jid"], @settings["jabber"]["password"]) 
+  @count = 0
 
-  def twit(what)  
+  def twit(what)
+    if @count > 30  
+      @tweets.clear 
+      @count = 1
+    end
     @tweets.prepend {     
       flow :margin => 5 do 
         background "#191616" .. "#363636", :radius => 8
@@ -18,7 +24,7 @@ Shoes.app :width => 400, :height => 600, :resizable => true, :title => "Twingle,
           image "spacer.gif", :width => 48, :height => 48
         end
         stack :width => -58, :margin => 5 do
-          eval("para " + linkinizer(what) + ", :stroke => '#fff', :margin => 0, :font => 'Arial 12px'") 
+          eval("para #{linkinizer(what)}, :stroke => '#fff', :margin => 0, :font => 'Arial 12px'")
         end 
       end
     }
@@ -99,9 +105,6 @@ Shoes.app :width => 400, :height => 600, :resizable => true, :title => "Twingle,
       
     @tweets = stack
   end
-
-  @jabber = Jabber::Simple.new(YOUR_JID, YOUR_PASSWORD) 
-  @count = 0
   
   animate(1) do
     if @jabber.connected? 

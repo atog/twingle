@@ -1,0 +1,7 @@
+create a file 'twingle.yaml'
+
+put the following information in it
+
+jabber:
+	jid: YOUR_JID
+	password: YOUR_PASSWORD
