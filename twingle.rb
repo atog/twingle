@@ -1,21 +1,23 @@
 Shoes.setup do
   gem "xmpp4r-simple"
+  gem "json_pure"
 end
 
 require "xmpp4r-simple"
 require "yaml"
+require "json/pure"
 
 Shoes.app :width => 400, :height => 600, :resizable => true, :title => "Twingle, experience twitter" do
   
   @settings = YAML.load_file('twingle.yaml')
   @jabber = Jabber::Simple.new(@settings["jabber"]["jid"], @settings["jabber"]["password"]) 
   @count = 0
+  
+  def sound?
+    return @settings["sound"]
+  end
 
   def twit(what)
-    if @count > 30  
-      @tweets.clear 
-      @count = 1
-    end
     @tweets.prepend {     
       flow :margin => 5 do 
         background "#191616" .. "#363636", :radius => 8
@@ -110,7 +112,7 @@ Shoes.app :width => 400, :height => 600, :resizable => true, :title => "Twingle,
     if @jabber.connected? 
       @first = true
       @jabber.received_messages do |m|
-        @chat_sound.play if @first 
+        @chat_sound.play if @first && sound?
         @first = false
         if m.from == "twitter@twitter.com" && m.type == :chat
           @count += 1
@@ -123,5 +125,9 @@ Shoes.app :width => 400, :height => 600, :resizable => true, :title => "Twingle,
     end    
   end
   
-  @chat_sound = video 'chat2.wav', :width => 0, :height => 0
+  if sound?
+    @chat_sound = video 'chat2.wav', :width => 0, :height => 0
+  end
+  
+  
 end
