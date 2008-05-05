@@ -5,3 +5,5 @@ put the following information in it
 jabber:
 	jid: YOUR_JID
 	password: YOUR_PASSWORD
+	
+sound: true
