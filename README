@@ -6,4 +6,8 @@ jabber:
 	jid: YOUR_JID
 	password: YOUR_PASSWORD
 	
+twitter:
+	username: YOUR_TWITTER_USERNAME
+	password: YOUR_TWITTER_PASSWORD
+	
 sound: true
