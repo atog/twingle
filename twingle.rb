@@ -5,25 +5,101 @@ end
 
 require "xmpp4r-simple"
 require "yaml"
+require "net/http"
 require "json/pure"
 
-Shoes.app :width => 400, :height => 600, :resizable => true, :title => "Twingle, experience twitter" do
+class Twitson  
+  @@twitter = 'twitter.com'
+  @@friends_path = '/statuses/friends_timeline.json'
+  @@show_path = '/users/show/'
+  
+  def initialize(username='', password='')
+    @username = username
+    @password = password
+  end
+  
+  def friends_timeline
+    get(@@friends_path)
+  end
+  
+  def show(user)
+    get("#{@@show_path}#{user}.json")
+  end
+
+  protected
+  
+    def get(path)
+      rvalue = []
+      begin
+        response = Net::HTTP.start(@@twitter, 80) do |http|
+          req = Net::HTTP::Get.new(path)
+          req.basic_auth(@username, @password) if !@username.empty?
+          http.request(req)
+        end
+        raise StandardError unless response.message == 'OK'
+        rvalue = JSON.load(response.body)
+      rescue StandardError => bang
+        puts bang
+      end
+      rvalue
+    end  
+end
+
+Shoes.app :width => 400, :height => 600, :resizable => true, :title => "Twingle, experience twitter" do  
   
   @settings = YAML.load_file('twingle.yaml')
   @jabber = Jabber::Simple.new(@settings["jabber"]["jid"], @settings["jabber"]["password"]) 
   @count = 0
   
+  def load_avatars
+    @avatars = {}
+    if File.exists?('avatars.yaml')
+      @avatars = YAML.load_file('avatars.yaml')
+    end
+  end
+
+  def load_current_tweets
+    unless @settings["twitter"].nil?
+      @twitson = Twitson.new(@settings["twitter"]["username"], @settings["twitter"]["password"])
+      current_tweets = @twitson.friends_timeline
+      current_tweets.reverse_each do |tweet|
+        username = tweet['user']['screen_name']
+        twit("#{username}: #{tweet['text']}", username)
+        @avatars[username] = tweet["user"]["profile_image_url"]
+      end
+      @avatars['You'] = @avatars[@settings["twitter"]["username"]] if @settings["twitter"]
+      save_avatars  
+    end
+  end
+  
+  def save_avatars
+    File.open( 'avatars.yaml', 'w' ) do |out|
+      YAML.dump(@avatars, out )
+    end
+  end
+  
+  def avatar(user)
+    value = @avatars[user]
+    unless value
+      result = @twitson.show(user)
+      value = result["profile_image_url"]
+      @avatars[user] = value
+      save_avatars
+    end
+    value
+  end
+    
   def sound?
     return @settings["sound"]
   end
 
-  def twit(what)
+  def twit(what, user=nil)
     @tweets.prepend {     
       flow :margin => 5 do 
         background "#191616" .. "#363636", :radius => 8
         stack :width => 58, :margin => 5 do
-          background "default_profile_normal.png", :width => 48, :height => 48, :radius => 4
-          image "spacer.gif", :width => 48, :height => 48
+          avatar = (user && avatar(user)) ? avatar(user) : "default_profile_normal.png"
+          image avatar, :width => 48, :height => 48, :radius => 4
         end
         stack :width => -58, :margin => 5 do
           eval("para #{linkinizer(what)}, :stroke => '#fff', :margin => 0, :font => 'Arial 12px'")
@@ -75,7 +151,7 @@ Shoes.app :width => 400, :height => 600, :resizable => true, :title => "Twingle,
 
   def send_say_it 
     @jabber.deliver("twitter@twitter.com", @say_it.text)
-    twit("You: " + @say_it.text)
+    twit("You: " + @say_it.text, "You")
     @say_it.text = ''
   end
   
@@ -116,7 +192,7 @@ Shoes.app :width => 400, :height => 600, :resizable => true, :title => "Twingle,
         @first = false
         if m.from == "twitter@twitter.com" && m.type == :chat
           @count += 1
-          twit(m.body)
+          twit(m.body, m.body[0, m.body.index(":")])
         end 
       end
       @status.replace strong(">-<(" + @count.to_s + ")"), :stroke => '#0C0'
@@ -129,5 +205,7 @@ Shoes.app :width => 400, :height => 600, :resizable => true, :title => "Twingle,
     @chat_sound = video 'chat2.wav', :width => 0, :height => 0
   end
   
+  load_avatars
+  load_current_tweets
   
 end
