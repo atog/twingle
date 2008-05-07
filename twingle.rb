@@ -93,6 +93,12 @@ $app = Shoes.app :width => 400, :height => 600, :resizable => true, :title => "T
   @jabber = Jabber::Simple.new(@settings["jabber"]["jid"], @settings["jabber"]["password"]) 
   @count = 0
   
+  # set you
+  @you = 'You'
+  unless @settings["twitter"].nil? 
+    @you = @settings["twitter"]["username"].capitalize unless @settings["twitter"]["username"].nil?
+  end
+  
   def load_avatars
     @avatars = {}
     if File.exists?('avatars.yaml')
@@ -210,24 +216,30 @@ $app = Shoes.app :width => 400, :height => 600, :resizable => true, :title => "T
       result << " \"" + message + "\""
     end    
 
-    warn(result)
     result = result
     result.gsub(/"[^"]+"/) { |m| html(m) }
   end
 
   def send_say_it 
     text = @say_it.text.chomp
-    if text == "show_log" 
+    if text == "console" 
       Shoes.show_log
     elsif text.length > 0
       @jabber.deliver("twitter@twitter.com", @say_it.text)
       @twit_mutex.synchronize do
-        twit("You: " + text, "You")
+        twit(@you + ": " + text, @you)
       end
     end
     @say_it.text = ''
+    check_leftover
   end
   
+  def check_leftover
+    leftover_count = (140-@say_it.text.to_s.length)
+    @leftover_value.style(:stroke => leftover_count < 0 ? red : black)
+    @leftover_value.replace(strong(leftover_count.to_s))
+  end
+
   background "#000"
   flow :width => -16 do 
     @header = stack do
@@ -244,13 +256,19 @@ $app = Shoes.app :width => 400, :height => 600, :resizable => true, :title => "T
       background "#666" .. "#000"
       flow :margin => 5 do
         @say_it = edit_box :margin => 5, :width => -110, :height => 50, :size => 9 do
+          check_leftover
           send_say_it if @say_it.text.index("\n") != nil
         end
         button "Say it", :width => 100, :right => 5, :top => 5 do
           send_say_it
         end
+        @leftover = stack :width => 50, :height => 35, :right => 100, :scroll => true, :top => -30 do
+          background "leftover.png"
+          @leftover_value = para strong('140'), :margin => 5, :align => 'center'
+        end          
       end 
     end 
+    
     
     stack do 
       @tweetswrapper = stack :height => 420, :width => 1.0, :scroll => true do
@@ -304,10 +322,13 @@ $app = Shoes.app :width => 400, :height => 600, :resizable => true, :title => "T
     @chat_sound = video 'chat2.wav', :width => 0, :height => 0
   end
   
-  @twit_mutex = Mutex.new
+  # load avatars
   load_avatars
+
+  # load previous tweets. Do this in seperate thread because the twitter api can cause quite some lag.
+  @twit_mutex = Mutex.new
   Thread.new do
-    sleep 0.5
+    #sleep 0.5
     load_current_tweets
     fix_sizes
   end
