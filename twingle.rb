@@ -94,21 +94,90 @@ class Twitson
 
 end
 
-$app = Shoes.app :width => 400, :height => 600, :resizable => true, :title => "Twingle, experience twitter" do  
+class Twingle < Shoes   
+  url "/", :setup
   
-  @settings = YAML.load_file('twingle.yaml')
-  @jabber = Jabber::Simple.new(@settings["jabber"]["jid"], @settings["jabber"]["password"]) 
-  @count = 0
-  
-  style(Link, :stroke => '#09C')
-  style(LinkHover, :stroke => '#000', :bold => true)
+  def setup
+    style(Link, :stroke => '#09C')
+    style(LinkHover, :stroke => '#000', :bold => true)
 
-  # set you
-  @you = 'You'
-  unless @settings["twitter"].nil? 
-    @you = @settings["twitter"]["username"].capitalize unless @settings["twitter"]["username"].nil?
+    # load settings
+    @settings = YAML.load_file('twingle.yaml')
+    
+    # set you-value
+    @you = 'You'
+    unless @settings["twitter"].nil? 
+      @you = @settings["twitter"]["username"].capitalize unless @settings["twitter"]["username"].nil?
+    end  
+
+    build_ui
+    load_avatars
+  
+    # load previous tweets. Do this in seperate thread because the twitter api can cause quite some lag.
+    @twit_mutex = Mutex.new
+    Thread.new do
+      #sleep 0.5
+      load_current_tweets
+      fix_sizes true
+    end
+
+    # start loop
+    @jabber = Jabber::Simple.new(@settings["jabber"]["jid"], @settings["jabber"]["password"]) 
+    @count = 0
+
+    #do_stuff
+    every(1) do
+      do_stuff
+    end
+  end
+
+  def do_stuff
+    poll_jabber
+    check_rate_limit
+    fix_sizes
   end
   
+  def poll_jabber
+    if @jabber && @jabber.connected? 
+      @first = true
+      #@twit_mutex.synchronize do
+        @jabber.received_messages do |m|
+          if m.from == "twitter@twitter.com" && m.type == :chat
+            @count += 1
+            unless (m.body.index(':').nil?)
+              if m.body.index("Direct from").nil?
+                @chat_sound.play if @first && sound?
+                twit(m.body, m.body[0, m.body.index(":")])
+              else
+                @direct_sound.play if sound?
+                twit(m.body, m.body[0, m.body.index(":")].sub(/Direct from /, ""), ":direct")
+              end
+            else
+              @chat_sound.play if @first && sound?
+              twit(m.body, 'twitter', ':system')
+            end
+            @first = false
+          end 
+        end
+      #end
+      @connected.clear do
+        background '#0C0' .. '#444'
+      end
+    else
+      @connected.clear do
+        background '#f00' .. '#444'
+      end
+    end    
+  end
+  
+  def check_rate_limit
+    if @twitson && @twitson.rate_limit_exceeded?
+      @ratelimitmessage.show
+    else
+      @ratelimitmessage.hide
+    end
+  end
+
   def load_avatars
     @avatars = {}
     if File.exists?('avatars.yaml')
@@ -276,54 +345,61 @@ $app = Shoes.app :width => 400, :height => 600, :resizable => true, :title => "T
     @leftover_value.replace(strong(leftover_count.to_s))
   end
 
-  background "#000"
-  flow :width => -gutter() do 
-    @connected = stack :width => 1.0, :height => 5, :scroll => true do
-      background '#f00' .. '#444'
+  def build_ui
+    if sound?
+      @chat_sound = video 'chat2.wav', :width => 0, :height => 0
+      @direct_sound = video 'direct.wav', :width => 0, :height => 0
     end
     
-    @header = stack do
-      background "#444" .. "#666"
-      flow do
-        image "logo.png", :margin => 5
-        stack :width => 100, :right => 0, :top => 5 do
-          #@status = para strong("> <"), :stroke => '#F00'
-        end
-      end
-    end
-  
-    @babblebox = stack do
-      background "#666" .. "#000"
-      flow :margin => 5 do
-        @say_it = edit_box :margin => 5, :width => -110, :height => 50, :size => 9 do
-          check_leftover
-          send_say_it if @say_it.text.index("\n") != nil
-        end
-        button "Say it", :width => 100, :right => 5, :top => 5 do
-          send_say_it
-        end
-        @leftover = stack :width => 50, :height => 35, :right => 100, :scroll => true, :top => -30 do
-          background "leftover.png"
-          @leftover_value = para strong('140'), :margin => 5, :align => 'center'
-        end          
-      end 
-    end 
-    
-    
-    stack do 
-      @tweetswrapper = stack :height => 420, :width => 1.0, :scroll => true do
-        background "#000"
-        @tweets = stack :width => -gutter()
+    background "#000"
+    flow :width => -gutter() do 
+      @connected = stack :width => 1.0, :height => 5, :scroll => true do
+        background '#f00' .. '#444'
       end
       
-      @ratelimitmessage = stack do
-        background "#000" .. "#600"
-        para strong('Rate Limit Exceeded'), :margin => 5, :stroke => '#fc0', :font => '12px'
+      @header = stack do
+        background "#444" .. "#666"
+        flow do
+          image "logo.png", :margin => 5
+          stack :width => 100, :right => 0, :top => 5 do
+            #@status = para strong("> <"), :stroke => '#F00'
+          end
+        end
+      end
+    
+      @babblebox = stack do
+        background "#666" .. "#000"
+        flow :margin => 5 do
+          @say_it = edit_box :margin => 5, :width => -110, :height => 50, :size => 9 do
+            check_leftover
+            send_say_it if @say_it.text.index("\n") != nil
+          end
+          button "Say it", :width => 100, :right => 5, :top => 5 do
+            send_say_it
+          end
+          @leftover = stack :width => 50, :height => 35, :right => 100, :scroll => true, :top => -30 do
+            background "leftover.png"
+            @leftover_value = para strong('140'), :margin => 5, :align => 'center'
+          end          
+        end 
+      end 
+      
+      stack do 
+        @tweetswrapper = stack :height => 420, :width => 1.0, :scroll => true do
+          background "#000"
+          @tweets = stack :width => -gutter()
+        end
+        
+        @ratelimitmessage = stack do
+          background "#000" .. "#600"
+          para strong('Rate Limit Exceeded'), :margin => 5, :stroke => '#fc0', :font => '12px'
+        end
       end
     end
   end
-  
+    
   def fix_sizes(force=false)
+    
     if force || @appHeight != $app.height || @ratelimitmessageHeight != @ratelimitmessage.height
       @appHeight != $app.height
       @ratelimitmessageHeight != @ratelimitmessage.height
@@ -335,64 +411,7 @@ $app = Shoes.app :width => 400, :height => 600, :resizable => true, :title => "T
       @tweets.width = @tweetswrapper.width-(@tweetswrapper.height < @tweets.height ? gutter() : 0)
     end
   end
-
-  every(1) do
-    if @jabber && @jabber.connected? 
-      @first = true
-      #@twit_mutex.synchronize do
-        @jabber.received_messages do |m|
-          if m.from == "twitter@twitter.com" && m.type == :chat
-            @count += 1
-            info(m)
-            unless (m.body.index(':').nil?)
-              if m.body.index("Direct from").nil?
-                @chat_sound.play if @first && sound?
-                twit(m.body, m.body[0, m.body.index(":")])
-              else
-                @direct_sound.play if sound?
-                twit(m.body, m.body[0, m.body.index(":")].sub(/Direct from /, ""), ":direct")
-              end
-            else
-              @chat_sound.play if @first && sound?
-              twit(m.body, 'twitter', ':system')
-            end
-            @first = false
-          end 
-        end
-      #end
-      @connected.clear do
-        background '#0C0' .. '#444'
-      end
-      #@status.replace strong(">-<(" + @count.to_s + ")"), :stroke => '#0C0'
-    else
-      @connected.clear do
-        background '#f00' .. '#444'
-      end
-      #@status.replace strong("> <"), :stroke => '#F00'
-    end    
-    
-    if @twitson && @twitson.rate_limit_exceeded?
-      @ratelimitmessage.show
-    else
-      @ratelimitmessage.hide
-    end
-
-    fix_sizes
-  end
-  
-  if sound?
-    @chat_sound = video 'chat2.wav', :width => 0, :height => 0
-    @direct_sound = video 'direct.wav', :width => 0, :height => 0
-  end
-  
-  # load avatars
-  load_avatars
-
-  # load previous tweets. Do this in seperate thread because the twitter api can cause quite some lag.
-  @twit_mutex = Mutex.new
-  Thread.new do
-    #sleep 0.5
-    load_current_tweets
-    fix_sizes true
-  end
 end
+
+
+$app = Shoes.app :width => 400, :height => 600, :resizable => true, :title => "Twingle, experience twitter"  
