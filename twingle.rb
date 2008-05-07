@@ -27,10 +27,8 @@ class Twitson
     get("#{@@show_path}#{user}.json", {})
   end
 
-  def wait_for_rate_limit?
-    wait = get_rate_limit_delay() > Time.now.to_i
-    File.delete 'rate_limit_delay.yaml' unless wait || !File.exists?('rate_limit_delay.yaml')
-    wait
+  def rate_limit_exceeded?
+      File.exists?('rate_limit_delay.yaml')
   end
 
   protected
@@ -56,6 +54,7 @@ class Twitson
             raise StandardError unless response.message == 'OK'
           end
           rvalue = JSON.load(response.body)
+          clear_rate_limit
         rescue StandardError => bang
           error(response.body)
           puts bang
@@ -72,6 +71,14 @@ class Twitson
       end
     end
 
+    def wait_for_rate_limit?
+      wait = get_rate_limit_delay() > Time.now.to_i
+    end
+
+    def clear_rate_limit
+      File.delete 'rate_limit_delay.yaml' unless wait || !File.exists?('rate_limit_delay.yaml')
+    end
+  
     def get_rate_limit_delay
       delay = { }
       if File.exists?('rate_limit_delay.yaml')
@@ -93,6 +100,9 @@ $app = Shoes.app :width => 400, :height => 600, :resizable => true, :title => "T
   @jabber = Jabber::Simple.new(@settings["jabber"]["jid"], @settings["jabber"]["password"]) 
   @count = 0
   
+  style(Link, :stroke => '#09C')
+  style(LinkHover, :stroke => '#000', :bold => true)
+
   # set you
   @you = 'You'
   unless @settings["twitter"].nil? 
@@ -263,12 +273,16 @@ $app = Shoes.app :width => 400, :height => 600, :resizable => true, :title => "T
 
   background "#000"
   flow :width => -16 do 
+    @connected = stack :width => 1.0, :height => 5, :scroll => true do
+      background '#f00' .. '#444'
+    end
+    
     @header = stack do
       background "#444" .. "#666"
       flow do
         image "logo.png", :margin => 5
         stack :width => 100, :right => 0, :top => 5 do
-          @status = para strong("> <"), :stroke => '#F00'
+          #@status = para strong("> <"), :stroke => '#F00'
         end
       end
     end
@@ -305,12 +319,9 @@ $app = Shoes.app :width => 400, :height => 600, :resizable => true, :title => "T
   end
   
   def fix_sizes
-    @tweetswrapper.height = $app.height - @header.height - @babblebox.height - @ratelimitmessage.height
+    @tweetswrapper.height = $app.height - @connected.height - @header.height - @babblebox.height - @ratelimitmessage.height 
     @tweets.width = @tweetswrapper.width-(@tweetswrapper.height < @tweets.height ? 16 : 0)
   end
-
-  style(Link, :stroke => '#09C')
-  style(LinkHover, :stroke => '#000', :bold => true)
 
   animate(1) do
     if @jabber.connected? 
@@ -329,12 +340,18 @@ $app = Shoes.app :width => 400, :height => 600, :resizable => true, :title => "T
           end 
         end
       end
-      @status.replace strong(">-<(" + @count.to_s + ")"), :stroke => '#0C0'
+      @connected.clear do
+        background '#0C0' .. '#444'
+      end
+      #@status.replace strong(">-<(" + @count.to_s + ")"), :stroke => '#0C0'
     else
-      @status.replace strong("> <"), :stroke => '#F00'
+      @connected.clear do
+        background '#f00' .. '#444'
+      end
+      #@status.replace strong("> <"), :stroke => '#F00'
     end    
     
-    if @twitson && @twitson.wait_for_rate_limit?
+    if @twitson && @twitson.rate_limit_exceeded?
       @ratelimitmessage.show
     else
       @ratelimitmessage.hide
