@@ -133,21 +133,37 @@ $app = Shoes.app :width => 400, :height => 600, :resizable => true, :title => "T
   end
   
   def avatar(user)
-    value = "default_profile_normal.png"
+    value = nil
 
     if user && @avatars
-      user = @settings["twitter"]["username"] if user == 'You' && @settings["twitter"]
+      # some special cases
+      if user == ':system'
+        user = 'twitter'
+      elsif user == 'You' && @settings["twitter"] 
+        user = @settings["twitter"]["username"]
+      end
+
+      # check cached values
       value = @avatars[user]
       unless value
+        # not found, check for special case (tracking through IM)
+        user = user[/^\(?(.+?)\)?$/,1]        
         result = @twitson.show(user)
-        if result["profile_image_url"].nil?
+        
+        # if found...
+        unless result["profile_image_url"].nil?
           value = result["profile_image_url"]
-          @avatars[user] = value
-          save_avatars
+          if value
+            # store avatar in cache
+            @avatars[user] = value
+            save_avatars
+          end
         end
       end
     end
-    value
+
+    # safeguard    
+    value.nil? ? "default_profile_normal.png" : value
   end
     
   def sound?
@@ -163,7 +179,12 @@ $app = Shoes.app :width => 400, :height => 600, :resizable => true, :title => "T
         end
 
         if isYou
-          background "#193666" .. "#363636", :radius => 8
+          background "#191616" .. "#366636", :radius => 8
+        elsif user == ':system'
+          background "#191616" .. "#663636", :radius => 8
+          what = "twitter: " + what
+        elsif user[0,1] == '('
+          background "#191616" .. "#363666", :radius => 8
         else
           background "#191616" .. "#363636", :radius => 8
         end
@@ -300,7 +321,11 @@ $app = Shoes.app :width => 400, :height => 600, :resizable => true, :title => "T
           @first = false
           if m.from == "twitter@twitter.com" && m.type == :chat
             @count += 1
-            twit(m.body, m.body[0, m.body.index(":")])
+            unless (m.body.index(':').nil?)
+              twit(m.body, m.body[0, m.body.index(":")])
+            else
+              twit(m.body, ':system')
+            end
           end 
         end
       end
