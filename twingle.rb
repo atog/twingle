@@ -64,8 +64,8 @@ Shoes.app :width => 400, :height => 600, :resizable => true, :title => "Twingle,
       current_tweets = @twitson.friends_timeline
       current_tweets.reverse_each do |tweet|
         username = tweet['user']['screen_name']
-        twit("#{username}: #{tweet['text']}", username)
         @avatars[username] = tweet["user"]["profile_image_url"]
+        twit("#{username}: #{tweet['text']}", username)
       end
       @avatars['You'] = @avatars[@settings["twitter"]["username"]] if @settings["twitter"]
       save_avatars  
