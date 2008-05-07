@@ -49,6 +49,7 @@ class Twitson
             evalue = JSON.load(response.body)
             raise StandardError if evalue['error'].index('Rate limit') === nil
             # rate limit exceeded
+            warn('rate limit exceeded')
             extend_rate_limit
             return rvalue
           else
@@ -112,6 +113,7 @@ $app = Shoes.app :width => 400, :height => 600, :resizable => true, :title => "T
             changed = true
           end
           twit("#{username}: #{tweet['text']}", username)
+          sleep 0.01
         end
       end
       save_avatars if changed
@@ -148,16 +150,22 @@ $app = Shoes.app :width => 400, :height => 600, :resizable => true, :title => "T
 
   def twit(what, user=nil)
     @tweets.prepend {     
-      flow :margin => 5, :width => 1.0 do 
-        background "#191616" .. "#363636", :radius => 8
+      flow :margin_top => 5, :margin_left => 5, :margin_right => 5, :width => 1.0 do 
+        isYou = user == 'You' 
+        unless @settings["twitter"].nil? 
+          isYou = isYou || (user.casecmp(@settings["twitter"]["username"]) == 0) unless @settings["twitter"]["username"].nil?
+        end
+
+        if isYou
+          background "#193666" .. "#363636", :radius => 8
+        else
+          background "#191616" .. "#363636", :radius => 8
+        end
         stack :width => 58, :margin => 5 do
           avatar = avatar(user)
           image avatar, :width => 48, :height => 48, :radius => 4
-          #background avatar, :width => 48, :height => 48, :radius => 4
-          #image "spacer.gif", :width => 48, :height => 48
         end
-        color = user == 'You' ? '#09f' : '#fff'
-        user = @settings["twitter"]["username"] if user == 'You' && @settings["twitter"]
+        color = '#fff'
         stack :width => -58, :margin => 5 do
           eval("para #{linkinizer(what)}, :stroke => '#{color}', :margin => 0, :font => 'Arial 12px'")
         end 
@@ -189,11 +197,11 @@ $app = Shoes.app :width => 400, :height => 600, :resizable => true, :title => "T
       message.scan(/http:\/\/\S+|@\w+/i) do |l|
         index = message.rindex(l)
         result << "\"#{message[pindex, index-pindex]}\"," if index > 0
-        result << " link(\"#{l}\", :click => "
+        result << " strong(link(\"#{l}\", :click => "
         if /@(\S+)/ =~ l
-          result << "\"http://twitter.com/#{l[/@(\w+)/,1]}\"),"
+          result << "\"http://twitter.com/#{l[/@(\w+)/,1]}\")),"
         else
-          result << "'#{l}'),"
+          result << "'#{l}')),"
         end
         pindex = index + l.length
       end
@@ -202,6 +210,7 @@ $app = Shoes.app :width => 400, :height => 600, :resizable => true, :title => "T
       result << " \"" + message + "\""
     end    
 
+    warn(result)
     result = result
     result.gsub(/"[^"]+"/) { |m| html(m) }
   end
@@ -210,13 +219,13 @@ $app = Shoes.app :width => 400, :height => 600, :resizable => true, :title => "T
     text = @say_it.text.chomp
     if text == "show_log" 
       Shoes.show_log
-    else
+    elsif text.length > 0
       @jabber.deliver("twitter@twitter.com", @say_it.text)
       @twit_mutex.synchronize do
         twit("You: " + text, "You")
       end
-      @say_it.text = ''
     end
+    @say_it.text = ''
   end
   
   background "#000"
@@ -255,6 +264,14 @@ $app = Shoes.app :width => 400, :height => 600, :resizable => true, :title => "T
       end
     end
   end
+  
+  def fix_sizes
+    @tweetswrapper.height = $app.height - @header.height - @babblebox.height - @ratelimitmessage.height
+    @tweets.width = @tweetswrapper.width-(@tweetswrapper.height < @tweets.height ? 16 : 0)
+  end
+
+  style(Link, :stroke => '#09C')
+  style(LinkHover, :stroke => '#000', :bold => true)
 
   animate(1) do
     if @jabber.connected? 
@@ -280,8 +297,7 @@ $app = Shoes.app :width => 400, :height => 600, :resizable => true, :title => "T
       @ratelimitmessage.hide
     end
 
-    @tweetswrapper.height = $app.height - @header.height - @babblebox.height - @ratelimitmessage.height
-    @tweets.width = @tweetswrapper.width-(@tweetswrapper.height < @tweets.height ? 16 : 0)
+    fix_sizes
   end
   
   if sound?
@@ -293,5 +309,6 @@ $app = Shoes.app :width => 400, :height => 600, :resizable => true, :title => "T
   Thread.new do
     sleep 0.5
     load_current_tweets
+    fix_sizes
   end
 end
