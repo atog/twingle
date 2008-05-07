@@ -76,7 +76,7 @@ class Twitson
     end
 
     def clear_rate_limit
-      File.delete 'rate_limit_delay.yaml' unless wait || !File.exists?('rate_limit_delay.yaml')
+      File.delete 'rate_limit_delay.yaml' if File.exists?('rate_limit_delay.yaml')
     end
   
     def get_rate_limit_delay
@@ -180,19 +180,25 @@ $app = Shoes.app :width => 400, :height => 600, :resizable => true, :title => "T
     return @settings["sound"]
   end
 
-  def twit(what, user=nil)
+  def twit(what, user=nil, type=':normal')
     @tweets.prepend {     
       flow :margin_top => 5, :margin_left => 5, :margin_right => 5, :width => 1.0 do 
-        isYou = user == 'You' 
-        unless @settings["twitter"].nil? 
-          isYou = isYou || (user.casecmp(@settings["twitter"]["username"]) == 0) unless @settings["twitter"]["username"].nil?
+        if type == ':normal'
+          isYou = user == 'You' 
+          unless @settings["twitter"].nil? 
+            isYou = isYou || (user.casecmp(@settings["twitter"]["username"]) == 0) unless @settings["twitter"]["username"].nil?
+          end
         end
 
-        if isYou
-          background "#191616" .. "#366636", :radius => 8
-        elsif user == ':system'
+        color = '#fff'
+        if type == ':system'
           background "#191616" .. "#663636", :radius => 8
           what = "twitter: " + what
+        elsif type == ':direct'
+          background "#969696" .. "#C6C6C6", :radius => 8
+        color = '#000'
+        elsif isYou
+          background "#191616" .. "#366636", :radius => 8
         elsif user[0,1] == '('
           background "#191616" .. "#363666", :radius => 8
         else
@@ -202,7 +208,6 @@ $app = Shoes.app :width => 400, :height => 600, :resizable => true, :title => "T
           avatar = avatar(user)
           image avatar, :width => 48, :height => 48, :radius => 4
         end
-        color = '#fff'
         stack :width => -58, :margin => 5 do
           eval("para #{linkinizer(what)}, :stroke => '#{color}', :margin => 0, :font => 'Arial 12px'")
         end 
@@ -272,7 +277,7 @@ $app = Shoes.app :width => 400, :height => 600, :resizable => true, :title => "T
   end
 
   background "#000"
-  flow :width => -16 do 
+  flow :width => -gutter() do 
     @connected = stack :width => 1.0, :height => 5, :scroll => true do
       background '#f00' .. '#444'
     end
@@ -308,7 +313,7 @@ $app = Shoes.app :width => 400, :height => 600, :resizable => true, :title => "T
     stack do 
       @tweetswrapper = stack :height => 420, :width => 1.0, :scroll => true do
         background "#000"
-        @tweets = stack :width => -16
+        @tweets = stack :width => -gutter()
       end
       
       @ratelimitmessage = stack do
@@ -318,28 +323,43 @@ $app = Shoes.app :width => 400, :height => 600, :resizable => true, :title => "T
     end
   end
   
-  def fix_sizes
-    @tweetswrapper.height = $app.height - @connected.height - @header.height - @babblebox.height - @ratelimitmessage.height 
-    @tweets.width = @tweetswrapper.width-(@tweetswrapper.height < @tweets.height ? 16 : 0)
+  def fix_sizes(force=false)
+    if force || @appHeight != $app.height || @ratelimitmessageHeight != @ratelimitmessage.height
+      @appHeight != $app.height
+      @ratelimitmessageHeight != @ratelimitmessage.height
+      @tweetswrapper.height = $app.height - @connected.height - @header.height - @babblebox.height - @ratelimitmessage.height 
+    end
+    
+    if force || @tweetsHeight != @tweets.height 
+      @tweetsHeight = @tweets.height
+      @tweets.width = @tweetswrapper.width-(@tweetswrapper.height < @tweets.height ? gutter() : 0)
+    end
   end
 
-  animate(1) do
-    if @jabber.connected? 
+  every(1) do
+    if @jabber && @jabber.connected? 
       @first = true
-      @twit_mutex.synchronize do
+      #@twit_mutex.synchronize do
         @jabber.received_messages do |m|
-          @chat_sound.play if @first && sound?
-          @first = false
           if m.from == "twitter@twitter.com" && m.type == :chat
             @count += 1
+            info(m)
             unless (m.body.index(':').nil?)
-              twit(m.body, m.body[0, m.body.index(":")])
+              if m.body.index("Direct from").nil?
+                @chat_sound.play if @first && sound?
+                twit(m.body, m.body[0, m.body.index(":")])
+              else
+                @direct_sound.play if sound?
+                twit(m.body, m.body[0, m.body.index(":")].sub(/Direct from /, ""), ":direct")
+              end
             else
-              twit(m.body, ':system')
+              @chat_sound.play if @first && sound?
+              twit(m.body, 'twitter', ':system')
             end
+            @first = false
           end 
         end
-      end
+      #end
       @connected.clear do
         background '#0C0' .. '#444'
       end
@@ -362,6 +382,7 @@ $app = Shoes.app :width => 400, :height => 600, :resizable => true, :title => "T
   
   if sound?
     @chat_sound = video 'chat2.wav', :width => 0, :height => 0
+    @direct_sound = video 'direct.wav', :width => 0, :height => 0
   end
   
   # load avatars
@@ -372,6 +393,6 @@ $app = Shoes.app :width => 400, :height => 600, :resizable => true, :title => "T
   Thread.new do
     #sleep 0.5
     load_current_tweets
-    fix_sizes
+    fix_sizes true
   end
 end
