@@ -90,7 +90,8 @@ class Tweet
     end
   
     def self.linkinizer(message)
-      message.gsub!("\"", "'")
+      message.gsub!("\\", "\\\\")
+      message.gsub!("\"", "\\\"")
       index = message.index(":")
       result = "app.span(app.strong(\"#{message[0, index]}\"), :font => '15px'), "
       message = message[index+1, message.length-index]
