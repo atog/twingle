@@ -81,17 +81,14 @@ class Tweet
       color = '#fff'
       if type == :system
         app.background rgb(30, 30, 180, 180), :curve => 8
-        #app.background "#191616" .. "#663636", :curve => 8
         what = "twitter: " + what
       elsif type == :direct
-        app.background "#969696" .. "#C6C6C6", :curve => 8
+        app.background rgb(255, 255, 255, 150), :curve => 8
         color = '#000'
       elsif type == :you
         app.background rgb(0, 102, 0, 120), :curve => 8
-        #app.background "#191616" .. "#366636", :curve => 8
       else
         app.background rgb(0, 0, 0, 120), :curve => 8
-        #app.background "#191616" .. "#363636", :curve => 8
       end
 
       app.stack :width => 58, :margin => 5 do
@@ -233,7 +230,6 @@ class Twingle < Shoes
       end
 
       @header = stack do
-        #background rgb(0,0,0,127)
         flow do
           image "logo.png", :margin => 5
           stack :width => 100, :right => 0, :top => 5
@@ -241,7 +237,6 @@ class Twingle < Shoes
       end
   
       @babblebox = stack do
-        #background rgb(0,0,0,100)
         flow :margin => 5 do
           @say_it = edit_box :margin => 5, :width => -110, :height => 50, :size => 9 do
             check_leftover
