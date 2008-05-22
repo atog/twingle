@@ -65,27 +65,38 @@ end
 
 class Tweet
   
-  def self.replace(app, flow, what, avatar=nil)
-    flow.clear { fill(app, what, avatar) }
-    flow
+  def self.replace(app, flow, what, avatar=nil, type=:normal)
+    flow.clear { fill(app, what, avatar, type) }
   end
     
-  def self.create(app, what, avatar=nil)
-    app.flow :margin => 7 do 
-      fill(app, what, avatar)
+  def self.create(app, what, avatar=nil, type=:normal)
+    app.flow :margin_top => 5, :margin_left => 5, :margin_right => 5, :width => 1.0 do 
+      fill(app, what, avatar, type)
     end
   end
   
   private
   
-    def self.fill(app, what, avatar=nil)
-      app.background "#191616" .. "#363636", :curve => 8
+    def self.fill(app, what, avatar=nil, type=:normal)
+      color = '#fff'
+      if type == :system
+        app.background "#191616" .. "#663636", :curve => 8
+        what = "twitter: " + what
+      elsif type == :direct
+        app.background "#969696" .. "#C6C6C6", :curve => 8
+        color = '#000'
+      elsif type == :you
+        app.background "#191616" .. "#366636", :curve => 8
+      else
+        app.background "#191616" .. "#363636", :curve => 8
+      end
+
       app.stack :width => 58, :margin => 5 do
         avatar = "default_profile_normal.png" if avatar.nil?
         app.image avatar, :width => 48, :height => 48, :curve => 4
       end
       app.stack :width => -58, :margin => 5 do
-        eval("app.para #{linkinizer(what)}, :stroke => '#fff', :margin => 0, :font => 'Arial 12px'")
+        eval("app.para #{linkinizer(what)}, :stroke => '#{color}', :margin => 0, :font => 'Arial 12px'")
       end     
     end
   
@@ -122,6 +133,16 @@ class Twingle < Shoes
   
   url "/", :setup
     
+  def check_rate_limit
+    @ratelimitmessage.hide
+    return
+    if @twitson && @twitson.rate_limit_exceeded?
+      @ratelimitmessage.show
+    else
+      @ratelimitmessage.hide
+    end
+  end
+
   def load_avatars
     @avatars = {}
     if File.exists?('avatars.yaml')
@@ -164,39 +185,63 @@ class Twingle < Shoes
     return @settings["sound"]
   end
 
-  def twit(what, user=nil)
+  def max_tweets
+    return !@settings["maxtweets"].nil? && @settings["maxtweets"].integer? ? @settings["maxtweets"].to_i : 10;
+  end
+
+  def twit(what, user=nil, type=:normal)
+    type = :you if type == :normal && (user.casecmp('You') == 0 || user.casecmp(@settings["twitter"]["username"]) == 0)
+
     twits = @tweets.contents
-    if twits.length == 11
-      twits.insert(0, Tweet.replace(self, twits.delete_at(10), what, avatar(user)))
+    if twits.length == max_tweets + 1
+      twits.insert(0, Tweet.replace(self, twits.delete_at(max_tweets), what, avatar(user), type))
     else
-      @tweets.prepend { Tweet.create(self, what, avatar(user)) }
+      @tweets.prepend { Tweet.create(self, what, avatar(user), type) }
     end
+    @tweets.show
   end
 
   def send_say_it 
-    @jabber.deliver("twitter@twitter.com", @say_it.text)
-    twit("You: " + @say_it.text, "You")
+    text = @say_it.text.chomp
+    if text.length > 0
+      @jabber.deliver("twitter@twitter.com", @say_it.text)
+      twit("You: " + @say_it.text, "You")
+    end
+
     @say_it.text = ''
+    check_leftover
   end
   
+  def check_leftover
+    leftover_count = (140-@say_it.text.to_s.length)
+    @leftover_value.style(:stroke => leftover_count < 0 ? red : black)
+    @leftover_value.replace(strong(leftover_count.to_s))
+  end
+
   def setup
     @settings = YAML.load_file('twingle.yaml')
     @jabber = Jabber::Simple.new(@settings["jabber"]["jid"], @settings["jabber"]["password"]) 
     @tracker = []    
     
     background "#000"
-    flow :width => -15 do 
+    flow :width => -gutter() do 
+      @connected = stack :width => 1.0, :height => 5, :scroll => true do
+        background '#f00' .. '#444'
+      end
+
       @header = stack do
-        background "#fff"
+        background "#444" .. "#666"
         flow do
-          title "Twingle", :width => -110
+          image "logo.png", :margin => 5
+          stack :width => 100, :right => 0, :top => 5
         end
       end
   
-      flow do
+      @babblebox = stack do
         background "#666" .. "#000"
         flow :margin => 5 do
           @say_it = edit_box :margin => 5, :width => -110, :height => 50, :size => 9 do
+            check_leftover
             if @say_it.text[-1] == ?\n
               send_say_it
             end          
@@ -204,33 +249,88 @@ class Twingle < Shoes
           button "Say it", :width => 100, :right => 5, :top => 5 do
             send_say_it
           end
+          @leftover = stack :width => 50, :height => 35, :right => 100, :scroll => true, :top => -30 do
+            background "leftover.png"
+            @leftover_value = para strong('140'), :margin => 5, :align => 'center'
+          end
+          @leftover.hide          
         end 
       end 
       
-      @tweets = stack
+      @tweetswrapper = stack :height => 420, :width => 1.0, :scroll => true do
+        background "#000"
+        @tweets = stack :width => -gutter()
+      end
+      
+      @ratelimitmessage = stack do
+        background "#000" .. "#600"
+        para strong('Rate Limit Exceeded'), :margin => 5, :stroke => '#fc0', :font => '12px'
+      end
     end
     
     if sound?
       @chat_sound = video 'chat2.wav', :width => 0, :height => 0
+      @direct_sound = video 'direct.wav', :width => 0, :height => 0
     end
+
+    Shoes.show_log
 
     load_avatars
     load_current_tweets
-    
-    animate(1) do
+    check_rate_limit
+
+    every(2) do
       if @jabber.connected? 
+        @connected.clear do
+          background '#0C0' .. '#444'
+        end
+
         @first = true
         @jabber.received_messages do |m|
           @chat_sound.play if @first && sound?
           @first = false
           if m.from == "twitter@twitter.com" && m.type == :chat
-            twit(m.body, m.body[0, m.body.index(":")])
+            unless (m.body.index(':').nil?)
+              unless m.body.index("Direct from").nil?
+                @direct_sound.play if sound?
+                twit(m.body, m.body[0, m.body.index(":")].sub(/Direct from /, ""), :direct)
+              else
+                @chat_sound.play if @first && sound?
+                twit(m.body, m.body[0, m.body.index(":")])
+              end
+            else
+              @chat_sound.play if @first && sound?
+              twit(m.body, 'twitter', :system)
+            end
+            @first = false
           end 
+        end
+      else
+        @connected.clear do
+          background '#f00' .. '#444'
         end
       end    
     end
+
+    animate(5) do
+      fix_sizes
+    end  
+
+    every(5) do
+      check_rate_limit
+    end
   end
   
+  def fix_sizes()
+    if @appHeight != $app.height || @ratelimitmessageHeight != @ratelimitmessage.height
+      @appHeight = $app.height
+      @ratelimitmessageHeight = @ratelimitmessage.height
+
+      @tweetswrapper.hide
+      @tweetswrapper.show
+      @tweetswrapper.height = $app.height - @connected.height - @header.height - @babblebox.height - @ratelimitmessage.height 
+    end
+  end
 end
 
-Shoes.app :width => 400, :height => 600, :resizable => true, :title => "Twingle, experience twitter"
+$app = Shoes.app :width => 400, :height => 600, :resizable => true, :title => "Twingle, experience twitter"
