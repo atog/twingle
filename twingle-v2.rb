@@ -26,23 +26,70 @@ class Twitson
     get("#{@@show_path}#{user}.json", {})
   end
 
+  def rate_limit_exceeded?
+      File.exists?('rate_limit_delay.yaml')
+  end
+
   protected
   
     def get(path, defaultValue = [])
       rvalue = defaultValue
-      begin
-        response = Net::HTTP.start(@@twitter, 80) do |http|
-          req = Net::HTTP::Get.new(path)
-          req.basic_auth(@username, @password) if !@username.empty?
-          http.request(req)
+      
+      unless wait_for_rate_limit?
+        begin
+          response = Net::HTTP.start(@@twitter, 80) do |http|
+            req = Net::HTTP::Get.new(path)
+            req.basic_auth(@username, @password) if !@username.empty?
+            http.request(req)
+          end
+          if response.message == 'Bad Request' 
+            evalue = JSON.load(response.body)
+            raise StandardError if evalue['error'].index('Rate limit') === nil
+            # rate limit exceeded
+            warn('rate limit exceeded')
+            extend_rate_limit
+            return rvalue
+          else
+            raise StandardError unless response.message == 'OK'
+          end
+          rvalue = JSON.load(response.body)
+          clear_rate_limit
+        rescue StandardError => bang
+          error bang
+          error response.body
         end
-        raise StandardError unless response.message == 'OK'
-        rvalue = JSON.load(response.body)
-      rescue StandardError => bang
-        error bang
       end
       rvalue
     end  
+
+    def extend_rate_limit
+      delay = { "until" => Time.now.to_i + 300 }
+      delay = { "delay" => delay } # wait 5 min
+      File.open( 'rate_limit_delay.yaml', 'w' ) do |out|
+        YAML.dump(delay, out)
+      end
+    end
+
+    def wait_for_rate_limit?
+      wait = get_rate_limit_delay() > Time.now.to_i
+    end
+
+    def clear_rate_limit
+      File.delete 'rate_limit_delay.yaml' if File.exists?('rate_limit_delay.yaml')
+    end
+  
+    def get_rate_limit_delay
+      delay = { }
+      if File.exists?('rate_limit_delay.yaml')
+        delay = YAML.load_file('rate_limit_delay.yaml')
+      end
+      
+      result = 0
+      unless delay["delay"].nil?
+        result = delay["delay"]["until"].to_i unless delay["delay"]["until"].nil?
+      end 
+      result   
+    end
 end
 
 class HTML
@@ -136,8 +183,6 @@ class Twingle < Shoes
   url "/", :setup
     
   def check_rate_limit
-    @ratelimitmessage.hide
-    return
     if @twitson && @twitson.rate_limit_exceeded?
       @ratelimitmessage.show
     else
