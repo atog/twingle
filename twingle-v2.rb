@@ -19,17 +19,17 @@ class Twitson
   end
   
   def friends_timeline
-    get(@@friends_path)
+    get(@@friends_path, [])
   end
   
   def show(user)
-    get("#{@@show_path}#{user}.json")
+    get("#{@@show_path}#{user}.json", {})
   end
 
   protected
   
-    def get(path)
-      rvalue = []
+    def get(path, defaultValue = [])
+      rvalue = defaultValue
       begin
         response = Net::HTTP.start(@@twitter, 80) do |http|
           req = Net::HTTP::Get.new(path)
@@ -86,7 +86,9 @@ class Tweet
         app.background rgb(255, 255, 255, 150), :curve => 8
         color = '#000'
       elsif type == :you
-        app.background rgb(0, 102, 0, 120), :curve => 8
+        app.background rgb(0, 104, 0, 120), :curve => 8
+      elsif type == :reply
+        app.background rgb(255, 201, 0, 120), :curve => 8
       else
         app.background rgb(0, 0, 0, 120), :curve => 8
       end
@@ -171,14 +173,37 @@ class Twingle < Shoes
   end
   
   def avatar(user)
-    value = @avatars[user]
-    unless value
-      result = @twitson.show(user)
-      value = result["profile_image_url"]
-      @avatars[user] = value
-      save_avatars
+    value = nil
+
+    if user && @avatars
+      # some special cases
+      if user == ':system'
+        user = 'twitter'
+      elsif user == 'You' && @settings["twitter"] 
+        user = @settings["twitter"]["username"]
+      end
+
+      # check cached values
+      value = @avatars[user]
+      unless value
+        # not found, check for special case (tracking through IM)
+        user = user[/^\(?(.+?)\)?$/,1]        
+        result = @twitson.show(user)
+        
+        # if found...
+        unless result["profile_image_url"].nil?
+          value = result["profile_image_url"]
+          if value
+            # store avatar in cache
+            @avatars[user] = value
+            save_avatars
+          end
+        end
+      end
     end
-    value
+
+    # safeguard    
+    value.nil? ? "default_profile_normal.png" : value
   end
     
   def sound?
@@ -190,8 +215,14 @@ class Twingle < Shoes
   end
 
   def twit(what, user=nil, type=:normal)
-    type = :you if type == :normal && (user.casecmp('You') == 0 || user.casecmp(@settings["twitter"]["username"]) == 0)
-
+    if type == :normal 
+      if (user.casecmp('You') == 0 || user.casecmp(@settings["twitter"]["username"]) == 0) 
+        type = :you 
+      elsif !@settings["twitter"]["username"].nil? && /\@#{@settings["twitter"]["username"]}/i =~ what 
+        type = :reply
+      end
+    end
+    
     twits = @tweets.contents
     if twits.length == max_tweets + 1
       twits.insert(0, Tweet.replace(self, twits.delete_at(max_tweets), what, avatar(user), type))
@@ -203,7 +234,10 @@ class Twingle < Shoes
 
   def send_say_it 
     text = @say_it.text.chomp
-    if text.length > 0
+    warn text
+    if text == 'console' 
+      Shoes.show_log
+    elsif text.length > 0
       @jabber.deliver("twitter@twitter.com", text)
       twit("You: " + text, "You")
     end
