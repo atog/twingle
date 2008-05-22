@@ -204,8 +204,8 @@ class Twingle < Shoes
   def send_say_it 
     text = @say_it.text.chomp
     if text.length > 0
-      @jabber.deliver("twitter@twitter.com", @say_it.text)
-      twit("You: " + @say_it.text, "You")
+      @jabber.deliver("twitter@twitter.com", text)
+      twit("You: " + text, "You")
     end
 
     @say_it.text = ''
