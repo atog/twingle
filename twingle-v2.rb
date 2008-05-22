@@ -259,7 +259,7 @@ class Twingle < Shoes
       
       @tweetswrapper = stack :height => 420, :width => 1.0, :scroll => true do
         background "#000"
-        @tweets = stack :width => -gutter()
+        @tweets = stack :width => -gutter(), :margin_bottom => 5
       end
       
       @ratelimitmessage = stack do
