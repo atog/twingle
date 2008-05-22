@@ -71,7 +71,7 @@ class Tweet
   end
     
   def self.create(app, what, avatar=nil)
-    app.flow :margin => 5 do 
+    app.flow :margin => 7 do 
       fill(app, what, avatar)
     end
   end
@@ -79,10 +79,10 @@ class Tweet
   private
   
     def self.fill(app, what, avatar=nil)
-      app.background "#191616" .. "#363636", :radius => 8
+      app.background "#191616" .. "#363636", :curve => 8
       app.stack :width => 58, :margin => 5 do
         avatar = "default_profile_normal.png" if avatar.nil?
-        app.image avatar, :width => 48, :height => 48, :radius => 4
+        app.image avatar, :width => 48, :height => 48, :curve => 4
       end
       app.stack :width => -58, :margin => 5 do
         eval("app.para #{linkinizer(what)}, :stroke => '#fff', :margin => 0, :font => 'Arial 12px'")
