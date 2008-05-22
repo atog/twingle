@@ -80,15 +80,18 @@ class Tweet
     def self.fill(app, what, avatar=nil, type=:normal)
       color = '#fff'
       if type == :system
-        app.background "#191616" .. "#663636", :curve => 8
+        app.background rgb(30, 30, 180, 180), :curve => 8
+        #app.background "#191616" .. "#663636", :curve => 8
         what = "twitter: " + what
       elsif type == :direct
         app.background "#969696" .. "#C6C6C6", :curve => 8
         color = '#000'
       elsif type == :you
-        app.background "#191616" .. "#366636", :curve => 8
+        app.background rgb(0, 102, 0, 120), :curve => 8
+        #app.background "#191616" .. "#366636", :curve => 8
       else
-        app.background "#191616" .. "#363636", :curve => 8
+        app.background rgb(0, 0, 0, 120), :curve => 8
+        #app.background "#191616" .. "#363636", :curve => 8
       end
 
       app.stack :width => 58, :margin => 5 do
@@ -223,14 +226,14 @@ class Twingle < Shoes
     @jabber = Jabber::Simple.new(@settings["jabber"]["jid"], @settings["jabber"]["password"]) 
     @tracker = []    
     
-    background "#000"
+    background "wood.jpg"
     flow :width => -gutter() do 
       @connected = stack :width => 1.0, :height => 5, :scroll => true do
-        background '#f00' .. '#444'
+        background '#f00'
       end
 
       @header = stack do
-        background "#444" .. "#666"
+        #background rgb(0,0,0,127)
         flow do
           image "logo.png", :margin => 5
           stack :width => 100, :right => 0, :top => 5
@@ -238,7 +241,7 @@ class Twingle < Shoes
       end
   
       @babblebox = stack do
-        background "#666" .. "#000"
+        #background rgb(0,0,0,100)
         flow :margin => 5 do
           @say_it = edit_box :margin => 5, :width => -110, :height => 50, :size => 9 do
             check_leftover
@@ -257,13 +260,17 @@ class Twingle < Shoes
         end 
       end 
       
+      @separator = stack :height => 1, :width => 1.0, :scroll => true do
+        background black
+      end
+
       @tweetswrapper = stack :height => 420, :width => 1.0, :scroll => true do
-        background "#000"
+        background rgb(0,0,0,127)
         @tweets = stack :width => -gutter(), :margin_bottom => 5
       end
       
       @ratelimitmessage = stack do
-        background "#000" .. "#600"
+        #background rgb(0,0,0,127)
         para strong('Rate Limit Exceeded'), :margin => 5, :stroke => '#fc0', :font => '12px'
       end
     end
@@ -273,8 +280,6 @@ class Twingle < Shoes
       @direct_sound = video 'direct.wav', :width => 0, :height => 0
     end
 
-    Shoes.show_log
-
     load_avatars
     load_current_tweets
     check_rate_limit
@@ -282,7 +287,7 @@ class Twingle < Shoes
     every(2) do
       if @jabber.connected? 
         @connected.clear do
-          background '#0C0' .. '#444'
+          background '#0C0'
         end
 
         @first = true
@@ -307,7 +312,7 @@ class Twingle < Shoes
         end
       else
         @connected.clear do
-          background '#f00' .. '#444'
+          background '#f00'
         end
       end    
     end
@@ -328,7 +333,7 @@ class Twingle < Shoes
 
       @tweetswrapper.hide
       @tweetswrapper.show
-      @tweetswrapper.height = $app.height - @connected.height - @header.height - @babblebox.height - @ratelimitmessage.height 
+      @tweetswrapper.height = $app.height - @connected.height - @header.height - @babblebox.height - @ratelimitmessage.height - 1
     end
   end
 end
