@@ -11,3 +11,4 @@ twitter:
 	password: YOUR_TWITTER_PASSWORD
 	
 sound: true
+maxtweets: 30
