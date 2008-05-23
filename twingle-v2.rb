@@ -19,30 +19,77 @@ class Twitson
   end
   
   def friends_timeline
-    get(@@friends_path)
+    get(@@friends_path, [])
   end
   
   def show(user)
-    get("#{@@show_path}#{user}.json")
+    get("#{@@show_path}#{user}.json", {})
+  end
+
+  def rate_limit_exceeded?
+      File.exists?('rate_limit_delay.yaml')
   end
 
   protected
   
-    def get(path)
-      rvalue = []
-      begin
-        response = Net::HTTP.start(@@twitter, 80) do |http|
-          req = Net::HTTP::Get.new(path)
-          req.basic_auth(@username, @password) if !@username.empty?
-          http.request(req)
+    def get(path, defaultValue = [])
+      rvalue = defaultValue
+      
+      unless wait_for_rate_limit?
+        begin
+          response = Net::HTTP.start(@@twitter, 80) do |http|
+            req = Net::HTTP::Get.new(path)
+            req.basic_auth(@username, @password) if !@username.empty?
+            http.request(req)
+          end
+          if response.message == 'Bad Request' 
+            evalue = JSON.load(response.body)
+            raise StandardError if evalue['error'].index('Rate limit') === nil
+            # rate limit exceeded
+            warn('rate limit exceeded')
+            extend_rate_limit
+            return rvalue
+          else
+            raise StandardError unless response.message == 'OK'
+          end
+          rvalue = JSON.load(response.body)
+          clear_rate_limit
+        rescue StandardError => bang
+          error bang
+          error response.body
         end
-        raise StandardError unless response.message == 'OK'
-        rvalue = JSON.load(response.body)
-      rescue StandardError => bang
-        error bang
       end
       rvalue
     end  
+
+    def extend_rate_limit
+      delay = { "until" => Time.now.to_i + 300 }
+      delay = { "delay" => delay } # wait 5 min
+      File.open( 'rate_limit_delay.yaml', 'w' ) do |out|
+        YAML.dump(delay, out)
+      end
+    end
+
+    def wait_for_rate_limit?
+      wait = get_rate_limit_delay() > Time.now.to_i
+    end
+
+    def clear_rate_limit
+      File.delete 'rate_limit_delay.yaml' if File.exists?('rate_limit_delay.yaml')
+    end
+  
+    def get_rate_limit_delay
+      delay = { }
+      if File.exists?('rate_limit_delay.yaml')
+        delay = YAML.load_file('rate_limit_delay.yaml')
+      end
+      
+      result = 0
+      unless delay["delay"].nil?
+        result = delay["delay"]["until"].to_i unless delay["delay"]["until"].nil?
+      end 
+      result   
+    end
 end
 
 class HTML
@@ -80,15 +127,17 @@ class Tweet
     def self.fill(app, what, avatar=nil, type=:normal)
       color = '#fff'
       if type == :system
-        app.background "#191616" .. "#663636", :curve => 8
+        app.background rgb(30, 30, 180, 180), :curve => 8
         what = "twitter: " + what
       elsif type == :direct
-        app.background "#969696" .. "#C6C6C6", :curve => 8
+        app.background rgb(255, 255, 255, 150), :curve => 8
         color = '#000'
       elsif type == :you
-        app.background "#191616" .. "#366636", :curve => 8
+        app.background rgb(0, 104, 0, 120), :curve => 8
+      elsif type == :reply
+        app.background rgb(255, 201, 0, 120), :curve => 8
       else
-        app.background "#191616" .. "#363636", :curve => 8
+        app.background rgb(0, 0, 0, 120), :curve => 8
       end
 
       app.stack :width => 58, :margin => 5 do
@@ -134,8 +183,6 @@ class Twingle < Shoes
   url "/", :setup
     
   def check_rate_limit
-    @ratelimitmessage.hide
-    return
     if @twitson && @twitson.rate_limit_exceeded?
       @ratelimitmessage.show
     else
@@ -171,14 +218,37 @@ class Twingle < Shoes
   end
   
   def avatar(user)
-    value = @avatars[user]
-    unless value
-      result = @twitson.show(user)
-      value = result["profile_image_url"]
-      @avatars[user] = value
-      save_avatars
+    value = nil
+
+    if user && @avatars
+      # some special cases
+      if user == ':system'
+        user = 'twitter'
+      elsif user == 'You' && @settings["twitter"] 
+        user = @settings["twitter"]["username"]
+      end
+
+      # check cached values
+      value = @avatars[user]
+      unless value
+        # not found, check for special case (tracking through IM)
+        user = user[/^\(?(.+?)\)?$/,1]        
+        result = @twitson.show(user)
+        
+        # if found...
+        unless result["profile_image_url"].nil?
+          value = result["profile_image_url"]
+          if value
+            # store avatar in cache
+            @avatars[user] = value
+            save_avatars
+          end
+        end
+      end
     end
-    value
+
+    # safeguard    
+    value.nil? ? "default_profile_normal.png" : value
   end
     
   def sound?
@@ -190,8 +260,14 @@ class Twingle < Shoes
   end
 
   def twit(what, user=nil, type=:normal)
-    type = :you if type == :normal && (user.casecmp('You') == 0 || user.casecmp(@settings["twitter"]["username"]) == 0)
-
+    if type == :normal 
+      if (user.casecmp('You') == 0 || user.casecmp(@settings["twitter"]["username"]) == 0) 
+        type = :you 
+      elsif !@settings["twitter"]["username"].nil? && /\@#{@settings["twitter"]["username"]}/i =~ what 
+        type = :reply
+      end
+    end
+    
     twits = @tweets.contents
     if twits.length == max_tweets + 1
       twits.insert(0, Tweet.replace(self, twits.delete_at(max_tweets), what, avatar(user), type))
@@ -203,7 +279,10 @@ class Twingle < Shoes
 
   def send_say_it 
     text = @say_it.text.chomp
-    if text.length > 0
+    warn text
+    if text == 'console' 
+      Shoes.show_log
+    elsif text.length > 0
       @jabber.deliver("twitter@twitter.com", text)
       twit("You: " + text, "You")
     end
@@ -223,14 +302,13 @@ class Twingle < Shoes
     @jabber = Jabber::Simple.new(@settings["jabber"]["jid"], @settings["jabber"]["password"]) 
     @tracker = []    
     
-    background "#000"
+    background "wood.jpg"
     flow :width => -gutter() do 
       @connected = stack :width => 1.0, :height => 5, :scroll => true do
-        background '#f00' .. '#444'
+        background '#f00'
       end
 
       @header = stack do
-        background "#444" .. "#666"
         flow do
           image "logo.png", :margin => 5
           stack :width => 100, :right => 0, :top => 5
@@ -238,7 +316,6 @@ class Twingle < Shoes
       end
   
       @babblebox = stack do
-        background "#666" .. "#000"
         flow :margin => 5 do
           @say_it = edit_box :margin => 5, :width => -110, :height => 50, :size => 9 do
             check_leftover
@@ -257,13 +334,17 @@ class Twingle < Shoes
         end 
       end 
       
+      @separator = stack :height => 1, :width => 1.0, :scroll => true do
+        background black
+      end
+
       @tweetswrapper = stack :height => 420, :width => 1.0, :scroll => true do
-        background "#000"
+        background rgb(0,0,0,127)
         @tweets = stack :width => -gutter(), :margin_bottom => 5
       end
       
       @ratelimitmessage = stack do
-        background "#000" .. "#600"
+        #background rgb(0,0,0,127)
         para strong('Rate Limit Exceeded'), :margin => 5, :stroke => '#fc0', :font => '12px'
       end
     end
@@ -273,8 +354,6 @@ class Twingle < Shoes
       @direct_sound = video 'direct.wav', :width => 0, :height => 0
     end
 
-    Shoes.show_log
-
     load_avatars
     load_current_tweets
     check_rate_limit
@@ -282,7 +361,7 @@ class Twingle < Shoes
     every(2) do
       if @jabber.connected? 
         @connected.clear do
-          background '#0C0' .. '#444'
+          background '#0C0'
         end
 
         @first = true
@@ -307,7 +386,7 @@ class Twingle < Shoes
         end
       else
         @connected.clear do
-          background '#f00' .. '#444'
+          background '#f00'
         end
       end    
     end
@@ -328,7 +407,7 @@ class Twingle < Shoes
 
       @tweetswrapper.hide
       @tweetswrapper.show
-      @tweetswrapper.height = $app.height - @connected.height - @header.height - @babblebox.height - @ratelimitmessage.height 
+      @tweetswrapper.height = $app.height - @connected.height - @header.height - @babblebox.height - @ratelimitmessage.height - 1
     end
   end
 end
