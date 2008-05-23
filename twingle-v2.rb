@@ -135,7 +135,7 @@ class Tweet
       elsif type == :you
         app.background rgb(0, 104, 0, 120), :curve => 8
       elsif type == :reply
-        app.background rgb(255, 201, 0, 120), :curve => 8
+        app.background rgb(	128, 0 ,128, 120), :curve => 8
       else
         app.background rgb(0, 0, 0, 120), :curve => 8
       end
@@ -279,7 +279,6 @@ class Twingle < Shoes
 
   def send_say_it 
     text = @say_it.text.chomp
-    warn text
     if text == 'console' 
       Shoes.show_log
     elsif text.length > 0
@@ -298,6 +297,7 @@ class Twingle < Shoes
   end
 
   def setup
+    warn Config::CONFIG["arch"]
     @settings = YAML.load_file('twingle.yaml')
     @jabber = Jabber::Simple.new(@settings["jabber"]["jid"], @settings["jabber"]["password"]) 
     @tracker = []    
