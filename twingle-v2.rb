@@ -255,15 +255,38 @@ class Twingle < Shoes
     return @settings["sound"]
   end
 
+  def chat_sound?
+    result = @settings["chat_sound"]
+    result = sound? if result.nil?
+    return result
+  end
+
+  def reply_sound?
+    result = @settings["reply_sound"]
+    result = sound? if result.nil?
+    return result
+  end
+
+  def direct_sound?
+    result = @settings["direct_sound"]
+    result = sound? if result.nil?
+    return result
+  end
+
   def max_tweets
     return !@settings["maxtweets"].nil? && @settings["maxtweets"].integer? ? @settings["maxtweets"].to_i : 10;
   end
 
+  # Return true if 'what' is a reply tweet
+  def reply?(what)
+    !@settings["twitter"]["username"].nil? && /\@#{@settings["twitter"]["username"]}/i =~ what  
+  end
+  
   def twit(what, user=nil, type=:normal)
     if type == :normal 
       if (user.casecmp('You') == 0 || user.casecmp(@settings["twitter"]["username"]) == 0) 
         type = :you 
-      elsif !@settings["twitter"]["username"].nil? && /\@#{@settings["twitter"]["username"]}/i =~ what 
+      elsif reply?(what)
         type = :reply
       end
     end
@@ -352,6 +375,7 @@ class Twingle < Shoes
     if sound?
       @chat_sound = video 'chat2.wav', :width => 0, :height => 0
       @direct_sound = video 'direct.wav', :width => 0, :height => 0
+      @reply_sound = video 'reply.wav', :width => 0, :height => 0
     end
 
     load_avatars
@@ -366,19 +390,23 @@ class Twingle < Shoes
 
         @first = true
         @jabber.received_messages do |m|
-          @chat_sound.play if @first && sound?
-          @first = false
+          
           if m.from == "twitter@twitter.com" && m.type == :chat
             unless (m.body.index(':').nil?)
-              unless m.body.index("Direct from").nil?
-                @direct_sound.play if sound?
+              if not m.body.index("Direct from").nil?
+                # @direct_sound.play if direct_sound?
                 twit(m.body, m.body[0, m.body.index(":")].sub(/Direct from /, ""), :direct)
+              elsif reply?(m.body)
+                @reply_sound.play if reply_sound?
+                twit(m.body, m.body[0, m.body.index(":")])
               else
-                @chat_sound.play if @first && sound?
+                # @chat_sound.play if @first && chat_sound?
+                @first = false
                 twit(m.body, m.body[0, m.body.index(":")])
               end
             else
-              @chat_sound.play if @first && sound?
+              # @chat_sound.play if @first && chat_sound?
+              @first = false
               twit(m.body, 'twitter', :system)
             end
             @first = false
